@@ -43,4 +43,4 @@ cd ligrad
 python setup.py install
 ```
 
-### See MANUAL.pdf in [GitHub](https://github.com/evoulimiotis/LiGrad.git) for detailed information.
+### See MANUAL.pdf in for detailed information.

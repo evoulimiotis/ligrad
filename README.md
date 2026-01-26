@@ -38,7 +38,7 @@ pip install ligrad
 ```
 
 ```bash
-git clone https://github.com/evoulimiotis/LiGrad.git
+git clone https://github.com/evoulimiotis/ligrad.git
 cd ligrad
 python setup.py install
 ```

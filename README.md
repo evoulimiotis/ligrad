@@ -4,7 +4,7 @@ Transit Model for Gravity-Darkened Oblate Stars
 
 Developed by Eleftherios Voulimiotis
 
-<img src="ligrad_logo.png" alt="Logo" width="225"/>
+<img src="ligrad_logo.png" alt="Logo" width="245"/>
 
 This package can be used for generating transit light-curves for gravity-darkened, oblate stars using a simple vectorized approach.
 

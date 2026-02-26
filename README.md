@@ -12,7 +12,7 @@ It features:
 - Gravity-darkening calculation
 - Limb-darkening (Claret 4-parameter)
 - Vectorized method for planet occultation integration
-- Example scripts and a LaTeX manual included
+- Example scripts and a manual included
 
 LiGrad makes use of the following packages:
 

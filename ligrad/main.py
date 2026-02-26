@@ -133,7 +133,7 @@ def grav_dark_transit_model(t_vals, orbital_period, st_mass, st_mean_radius, st_
     st_mass, st_mean_radius, st_mean_temperature = st_mass*Ms, st_mean_radius*Rs, st_mean_temperature*10000
     R_eq = st_mean_radius*((2 + omega**2)/2)**(1/3)  ##### for the volume-preserving stellar mean radius
     R_polar = R_eq*(2/(2 + omega**2))
-    x, y, z, lat = spheroid(R_eq, R_polar, 3200)  ##### constructing the stellar surface
+    x, y, z, lat = spheroid(R_eq, R_polar, 2500)  ##### constructing the stellar surface
     _, y_rot, z_rot, R = rotated_spheroid(x, y, z, np.deg2rad(lamda), np.deg2rad(i_s))
     mask = vis_mask(x, y, z, R_eq, R_polar, R)
     y_vis = y_rot[mask]

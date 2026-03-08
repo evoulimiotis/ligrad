@@ -89,7 +89,7 @@ def limb_darkening(y_proj, z_proj, yc, zc, r, u1, u2, u3, u4):
     mu = np.sqrt(np.clip(1 - rho**2, 0, None))
     I_claret = np.ones_like(rho)
     inside = rho <= 1  #####m using the 4-term Claret law for limb darkening calculation
-    I_claret[inside] = 1 - u1*(1 - mu[inside]) - u2*(1 - mu[inside])**2 - u3*(1 - mu[inside])**3 - u4*(1 - mu[inside])**4
+    I_claret[inside] = 1 - u1*(1 - (mu[inside])**(1/2)) - u2*(1 - mu[inside]) - u3*(1 - (mu[inside])**(3/2)) - u4*(1 - (mu[inside])**2)
     I_claret[~inside] = 0.0
     return I_claret
 

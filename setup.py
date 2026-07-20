@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 with open("README.md", "r") as f:
-    description = f.read()
+    readme_content = f.read()
 
 setup(
     name='ligrad',
-    version='1.1.3',
+    version='1.1.4',
     packages=find_packages(),
     install_requires=[
         "numpy>=1.17",
@@ -13,6 +13,11 @@ setup(
         "astropy>=4.0",
         "pylightcurve>=2.0"
     ],
-    long_description=description,
+    
+    author="Eleftherios Voulimiotis",
+    author_email="evoulimi@physics.auth.gr",
+    
+    description="A Python package for generating transit light-curves of gravity-darkened, oblate stars",
+    long_description=readme_content,
     long_description_content_type="text/markdown",
 )

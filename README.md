@@ -10,7 +10,7 @@ This package can be used for generating transit light-curves for gravity-darkene
 
 It features:
 - Gravity-darkening calculation
-- Limb-darkening (Claret 4-parameter)
+- Limb-darkening (quadratic law)
 - Vectorized method for planet occultation integration
 - Example scripts and a manual included
 

@@ -131,6 +131,7 @@ def occulted_flux(y_occ, z_occ, Rocc_phys, I_total, yc, zc, ped, r_ell, tree, dy
     Y = y_occ + dy
     Z = z_occ + dz
     point_ang = np.arctan2(Z - zc, Y - yc)  ## the polar angle of each planet grid point (Yi,Zi) measured from the stellar center
+    point_ang = np.mod(point_ang, 2*np.pi)
     r_at_points = np.interp(point_ang, ped, r_ell)
     on_star = ((Y - yc)**2 + (Z - zc)**2) <= r_at_points**2  #### mask for inside the stellar 2-d projected elliptic disk
     

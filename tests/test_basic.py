@@ -6,7 +6,7 @@ time = np.linspace(-0.1, 0.1, 320)
 
 flux = grav_dark_transit_model(t_vals = time, orbital_period = 5.0, st_mass = 1.0, st_mean_radius = 1.0, 
                                st_mean_temperature = 0.58, beta = 0.2, lamda = 70.0, i_s = 50.0, omega = 0.6, 
-                               u1 = 0.5, u2 = -0.1, e = 0.0, i_0 = 88.0, omega_p = 0.0, raan = 0.0, t_p = 0.0, 
+                               u1 = 0.5, u2 = -0.1, e = 0.0, i_0 = 88.0, omega_p = 0.0, raan = 0.0, t_mid = 0.0, 
                                rp_rs = 0.1, obs_wavelength=800e-9, integration_grid_size=2)
 
 ### in case you want to use real rotational velocities (v*sini in km/s) for the stellar rotation you can use the vsini2omega function,

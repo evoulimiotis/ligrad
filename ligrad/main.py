@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.spatial import ConvexHull, cKDTree
 from astropy import constants as const
-import pylightcurve as plc
 
 
 
@@ -64,28 +63,18 @@ def vis_mask(x, y, z, Re_eq, Rp_polar, R):
     Nz = z/Rp_polar**2  ##### x,y,z normals
     norm = np.array([Nx, Ny, Nz])
     rot_norm = R @ norm #### rotate the normals
-    return rot_norm[0] > 0  #### only the points with positive norm elements should be visible
+    mask = rot_norm[0] > 0  #### only the points with positive norm elements should be visible
+    norm_mag = np.sqrt(Nx**2 + Ny**2 + Nz**2)
+    mu = rot_norm[0]/norm_mag
+    return mask, mu
 
 
 
-def ellipse_radius(y_vis, z_vis, theta):
-    ell_pts = np.column_stack([y_vis, z_vis])
-    hull = ConvexHull(ell_pts)  #### points on the projected ellipse boundary
-    ye, ze = y_vis[hull.vertices], z_vis[hull.vertices]
-    D = np.column_stack([ye**2, ye*ze, ze**2, ye, ze])
-    synt, _, _, _ = np.linalg.lstsq(D, np.ones(len(ye)), rcond=None)  ### fitting the ellipse parameters with least squares
-    a, b, c, d, e = synt
-    M = np.array([[2*a, b], [b, 2*c]])
-    yc, zc = np.linalg.solve(M, [-d, -e])
-    A = np.array([[a, b/2], [b/2, c]])
-    eigvals, eigvecs = np.linalg.eigh(A)
-    f = 1 - a*yc**2 - b*yc*zc - c*zc**2 - d*yc - e*zc
-    semi_ax = np.sqrt(f/eigvals)
-    a_s, b_s = semi_ax
-    psi = np.arctan2(eigvecs[1,0], eigvecs[0,0])
-    phi = theta - psi
-    r = (a_s*b_s)/np.sqrt((b_s*np.cos(phi))**2 + (a_s*np.sin(phi))**2)  ##### radius of the projected ellipse at theta, centered around (yc, zc)
-    return r, yc, zc
+def ellipse_radius(theta, Re_eq, Rp_polar, i_s, lamda):  ### analytical expression derived from the Schur complement
+    sini = np.sin(i_s)
+    cosi = np.cos(i_s)
+    D = (Re_eq*cosi)**2 + (Rp_polar*sini)**2
+    return Re_eq*np.sqrt(D/(D + (Re_eq**2 - Rp_polar**2)*(sini*np.sin(theta + lamda))**2))
 
 
 
@@ -102,40 +91,28 @@ def gravity_darkening(st_mass, st_mean_temperature, beta, omega, obs_wavelength,
 
 
 
-def limb_darkening(y_proj, z_proj, yc, zc, r, u1, u2):
-    y_cent = y_proj - yc
-    z_cent = z_proj - zc
-    rho = np.sqrt(y_cent**2 + z_cent**2)/r
-    mu = np.sqrt(np.clip(1 - rho**2, 0, None))
-    I_claret = np.ones_like(rho)
-    inside = rho <= 1  #####m using the quadratic law for limb darkening calculation
-    I_claret[inside] = 1 - u1*(1 - mu[inside]) - u2*(1 - mu[inside])**2
-    I_claret[~inside] = 0.0
-    return I_claret
+def limb_darkening(mu, u1, u2):
+    mu = np.clip(mu, 0, 1)
+    return 1.0 - u1*(1 - mu) - u2*(1 - mu)**2
 
 
 
-def unocculted_flux(I_total, y_vis, z_vis):
-    p = np.column_stack([y_vis, z_vis])
-    hull = ConvexHull(p)
+def unocculted_flux(I_total, points):
+    hull = ConvexHull(points)
     proj_area = hull.volume  ##### projected area of the visible stellar disk
     dA = proj_area/len(I_total)  ### the area element for integration
     return np.sum(I_total)*dA
 
 
 
-def occulted_flux(y_occ, z_occ, Rocc_phys, I_total, yc, zc, ped, r_ell, tree, dy, dz, dA):
+def occulted_flux(Y_proj, Z_proj, Rocc_phys, I_total, R_eq, R_polar, i_s, lamda, tree, dA):
     if Rocc_phys <= 0:
         return 0.0
     
-    Y = y_occ + dy
-    Z = z_occ + dz
-    point_ang = np.arctan2(Z - zc, Y - yc)  ## the polar angle of each planet grid point (Yi,Zi) measured from the stellar center
-    point_ang = np.mod(point_ang, 2*np.pi)
-    r_at_points = np.interp(point_ang, ped, r_ell)
-    on_star = ((Y - yc)**2 + (Z - zc)**2) <= r_at_points**2  #### mask for inside the stellar 2-d projected elliptic disk
-    
-    Y_final, Z_final = Y[on_star], Z[on_star]
+    proj_theta = np.arctan2(Z_proj, Y_proj)
+    r_proj_theta = ellipse_radius(proj_theta, R_eq, R_polar, np.deg2rad(i_s), np.deg2rad(lamda))
+    on_star = (Y_proj**2 + Z_proj**2) <= r_proj_theta**2
+    Y_final, Z_final = Y_proj[on_star], Z_proj[on_star]
     
     if len(Y_final) == 0:
         return 0.0
@@ -145,9 +122,42 @@ def occulted_flux(y_occ, z_occ, Rocc_phys, I_total, yc, zc, ped, r_ell, tree, dy
 
 
 
-def planet_position(t, orb_period, e, i_0, omega_p, raan, t_p, st_mass):
-        a = (G*st_mass*((orb_period*86400)**2)/(4*np.pi**2))**(1/3)
-        return plc.planet_orbit(orb_period, a, e, i_0, omega_p, t_p, t, raan)
+def kep2car(t, a, e, i_0, raan, omega_p, t_mid, orb_period):
+    t = np.atleast_1d(np.asarray(t, dtype=float))
+    inc_r = np.radians(i_0)
+    Om_r = np.radians(raan)
+    om_r = np.radians(omega_p)
+    n = 2*np.pi/orb_period
+
+    f_c = np.pi/2 - om_r  ### true anomaly at inferior conjunction, u = om_r + f_c = pi/2
+    E_c = 2*np.arctan2(np.sqrt(1 - e)*np.sin(f_c/2), np.sqrt(1 + e)*np.cos(f_c/2))
+    M_c = E_c - e*np.sin(E_c)
+
+    M = n*(t - t_mid) + M_c
+    M = np.mod(M, 2*np.pi)
+
+    E = M.copy()
+    for _ in range(50):
+        dE = (E - e*np.sin(E) - M)/(1 - e*np.cos(E))
+        E -= dE
+        if np.all(np.abs(dE) < 1e-8):
+            break
+
+    f = 2.0*np.arctan2(np.sqrt(1 + e)*np.sin(E/2), np.sqrt(1 - e)*np.cos(E/2))
+    r = a*(1 - e*np.cos(E))
+
+    u = om_r + f
+    cosu, sinu = np.cos(u), np.sin(u)
+    cosi, sini = np.cos(inc_r), np.sin(inc_r)
+    cosO, sinO = np.cos(Om_r), np.sin(Om_r)
+
+    x = r*sinu*sini
+    y = -r*(cosO*cosu - sinO*sinu*cosi)
+    z = -r*(sinO*cosu + cosO*sinu*cosi)
+
+    if x.size == 1:
+        return x[0], y[0], z[0]
+    return x, y, z
 
 
 
@@ -172,29 +182,29 @@ def vsini2omega(vsini_kms, st_mass_solar, R_mean_solar, i_s_deg):
 
 
 def grav_dark_transit_model(t_vals, orbital_period, st_mass, st_mean_radius, st_mean_temperature, 
-                             beta, lamda, i_s, omega, u1, u2, e, i_0, omega_p, raan, t_p, 
+                             beta, lamda, i_s, omega, u1, u2, e, i_0, omega_p, raan, t_mid, 
                              rp_rs, obs_wavelength=800e-9, integration_grid_size=1):
     st_mass, st_mean_radius, st_mean_temperature = st_mass*Ms, st_mean_radius*Rs, st_mean_temperature*10000
     R_eq = st_mean_radius*((2 + omega**2)/2)**(1/3)  ##### for the volume-preserving stellar mean radius
     R_polar = R_eq*(2/(2 + omega**2))
     x, y, z, lat = spheroid(R_eq, R_polar, 2500)  ##### constructing the stellar surface
     _, y_rot, z_rot, R = rotated_spheroid(x, y, z, np.deg2rad(lamda), np.deg2rad(i_s))
-    mask = vis_mask(x, y, z, R_eq, R_polar, R)
+    mask, mu_all = vis_mask(x, y, z, R_eq, R_polar, R)
     y_vis = y_rot[mask]
     z_vis = z_rot[mask]
+    points = np.column_stack([y_vis, z_vis])
+    mu_vis = mu_all[mask]
+    
     
     I_grav = gravity_darkening(st_mass, st_mean_temperature, beta, omega, obs_wavelength, R_eq, R_polar, lat)
-    ped = np.linspace(0, 2*np.pi, 100)
-    r_ell, yc, zc = ellipse_radius(y_vis, z_vis, ped)
-    point_angles = np.arctan2(z_vis - zc, y_vis - yc)
-    point_angles = np.where(point_angles < 0, point_angles + 2*np.pi, point_angles)
-    r_points = np.interp(point_angles, ped, r_ell)
-    I_limb = limb_darkening(y_vis, z_vis, yc, zc, r_points, u1, u2)
+    I_limb = limb_darkening(mu_vis, u1, u2)
     I_total = I_grav[mask]*I_limb    ###### computing the full intensity profile
     
-    F_out = unocculted_flux(I_total, y_vis, z_vis)
-    tree = cKDTree(np.column_stack([y_vis, z_vis]))
+    
+    F_out = unocculted_flux(I_total, points)
+    tree = cKDTree(points)
     Rp_phys = rp_rs*st_mean_radius  ###### again for the volume-preserving mean radius
+    
     
     integration_grid_size = 250*integration_grid_size
     i = np.arange(integration_grid_size)
@@ -205,16 +215,16 @@ def grav_dark_transit_model(t_vals, orbital_period, st_mass, st_mean_radius, st_
     planet_dz = r*np.sin(theta)
     dA = (np.pi*Rp_phys**2)/integration_grid_size
     
-    R_star_max = np.max(r_ell)
-    flux = []
-    for t in t_vals:
-        x_p, y_p, z_p = planet_position(t, orbital_period, e, i_0, omega_p, raan, t_p, st_mass)
-        d_proj = np.sqrt((y_p - yc)**2 + (z_p - zc)**2)
-        if x_p >= 0 and d_proj <= (R_star_max + 1.05*Rp_phys):
-            DF = occulted_flux(y_p, z_p, Rp_phys, I_total, yc, zc, ped, r_ell, tree, planet_dy, planet_dz, dA)
-            flux_norm = (F_out - DF)/F_out  #### calculating the normalized flux at each time step
-        else:
-            flux_norm = 1.0
-        flux.append(flux_norm)
+    a = (G*st_mass*((orbital_period*86400)**2)/(4*np.pi**2))**(1/3)
+    x_p, y_p, z_p = kep2car(t_vals, a, e, i_0, raan, omega_p, t_mid, orbital_period)
+    d_proj = np.sqrt((y_p - 0)**2 + (z_p - 0)**2)
+    position_mask = (x_p >= 0) & (d_proj <= (R_eq + 1.001*Rp_phys))
+    
+    flux = np.ones_like(t_vals, dtype=float)
+    js = np.where(position_mask)[0]
+    
+    for j in js:
+        DF = occulted_flux(y_p[j] + planet_dy, z_p[j] + planet_dz, Rp_phys, I_total, R_eq, R_polar, i_s, lamda, tree, dA)
+        flux[j] = (F_out - DF)/F_out
     return np.array(flux)
 

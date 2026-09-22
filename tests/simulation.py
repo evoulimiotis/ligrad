@@ -5,8 +5,8 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.tri import Triangulation
 import time
 from astropy import constants as const
-from ligrad.main import spheroid, rotated_spheroid, vis_mask, ellipse_radius, gravity_darkening, limb_darkening, kep2car, \
-    grav_dark_transit_model, rotation_matrix_x, rotation_matrix_y, vsini2omega
+from ligrad.main import spheroid, rotated_spheroid, vis_mask, gravity_darkening, limb_darkening, kep2car, \
+    gd_transit_model, rotation_matrix_x, rotation_matrix_y, vsini2omega
 
 
 
@@ -64,7 +64,7 @@ def surface_lines(ax, Re_eq, Rp_polar, lamda, i_s, Nmeridians=12, Nparallels=5):
 
 
 def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temperature, beta, lamda, i_s, u1, u2, e, i_0,
-               omega_p, raan, t_mid, rp_rs, veq_sini=None, omega=None, obs_wavelength=800e-9, integration_grid_size=1,
+               omega_p, raan, t_p, rp_rs, veq_sini=None, omega=None, obs_wavelength=800e-9, pl_grid=1,
                t_start=-0.15, t_end=0.15, time_points=250, save=True):
 
     if omega is None:
@@ -77,8 +77,8 @@ def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temper
     
     print("\n\nComputing light-curve...")
     start1 = time.time()
-    flux_values = grav_dark_transit_model(ts, orbital_period, st_mass, st_mean_radius, st_mean_temperature, beta, lamda, i_s,
-                                          omega, u1, u2, e, i_0, omega_p, raan, t_mid, rp_rs, obs_wavelength, integration_grid_size)
+    flux_values = gd_transit_model(ts, orbital_period, st_mass, st_mean_radius, st_mean_temperature, beta, lamda, i_s,
+                                          omega, u1, u2, e, i_0, omega_p, raan, t_p, rp_rs, obs_wavelength, pl_grid)
     end1 = time.time()
     print("   Completed with runtime (sec):", round(end1-start1, 4))
 
@@ -96,9 +96,9 @@ def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temper
     z_vis = z_rot[mask]
     mu_vis = mu_all[mask]
 
-    I_grav = gravity_darkening(st_mass_si, st_mean_temperature_si, beta, omega, obs_wavelength, R_eq, R_polar, lat)
-    #I_limb = limb_darkening(mu_vis, u1, u2)
-    I_vis = I_grav[mask]#*(I_limb)
+    I_grav, _ = gravity_darkening(st_mass_si, st_mean_temperature_si, beta, omega, obs_wavelength, R_eq, R_polar, lat)
+    I_limb = limb_darkening(mu_vis, u1, u2)
+    I_vis = I_grav[mask]*(I_limb)
     Rp_phys = rp_rs*st_mean_radius_si
 
 
@@ -122,7 +122,7 @@ def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temper
     ax2.grid(True, alpha=0.3)
 
     trai_grid = Triangulation(y_vis, z_vis)
-    star_surface = ax1.tripcolor(trai_grid, I_vis, shading='gouraud', cmap='YlOrBr_r', vmin=0.95*I_vis.min(), vmax=I_vis.max())
+    star_surface = ax1.tripcolor(trai_grid, I_vis, shading='gouraud', cmap='YlOrBr_r', vmin=1.0*I_vis.min(), vmax=I_vis.max())
     surface_lines(ax1, R_eq, R_polar, lamda, i_s, Nmeridians=12, Nparallels=5)
 
     planet_circle = plt.Circle((0, 0), Rp_phys, color='black', alpha=0.9)
@@ -141,7 +141,7 @@ def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temper
             trail_y.clear()
             trail_z.clear()
         t = ts[frame]
-        x_p, y_p, z_p = kep2car(t, a_orbit, e, i_0, raan, omega_p, t_mid, orbital_period)
+        x_p, y_p, z_p = kep2car(t, a_orbit, e, i_0, raan, omega_p, t_p, orbital_period)
         planet_circle.center = (y_p, z_p)
         if x_p >= 0:
             planet_circle.set_alpha(0.95)
@@ -189,7 +189,6 @@ def simulation(filename, orbital_period, st_mass, st_mean_radius, st_mean_temper
 
 
 ######## example below
-simulation(filename='kelt9b_test.gif', orbital_period=1.4811235, st_mass=2.52, st_mean_radius=2.36, st_mean_temperature=1.017,
-           beta=0.138, lamda=255.6, i_s=51.6, u1=0.222, u2=0.17, e=0.0, i_0=85.3, omega_p=0.0, raan=0.0, t_p=0.0, rp_rs=0.078, 
-           veq_sini=111.4, obs_wavelength=800e-9, integration_grid_size=5, t_start=-0.15, t_end=0.15, time_points=250, save = True)
-
+simulation(filename='kelt9b_test4.gif', orbital_period=1.4811235, st_mass=2.52, st_mean_radius=2.36, st_mean_temperature=1.017,
+           beta=0.238, lamda=255.6, i_s=71.6, u1=0.222, u2=0.17, e=0.0, i_0=85.3, omega_p=0.0, raan=0.0, t_p=0.0, rp_rs=0.078, 
+           veq_sini=211.4, obs_wavelength=800e-9, pl_grid=5, t_start=-0.15, t_end=0.15, time_points=250, save = True)

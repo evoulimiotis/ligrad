@@ -100,9 +100,16 @@ def sphere_unocculted_flux(Rs, u1, u2):
 
 
 
-def unocculted_flux(I_total, proj_area):
-    dA = proj_area/len(I_total)  ### the area element for integration
-    return np.sum(I_total)*dA
+def unocculted_flux(I_total, mu, theta_vis, Re_eq, Rp_polar, n_total):
+    q = Re_eq/Rp_polar
+    sin_t = np.sin(theta_vis)
+    cos_t = np.cos(theta_vis)
+    f = sin_t*sin_t + q*q*cos_t*cos_t
+    r = Re_eq/np.sqrt(f)
+    dlnr_dtheta = ((q*q - 1.0)*sin_t*cos_t/f)
+    dA_dOmega = (r*r*np.sqrt(1.0 + dlnr_dtheta*dlnr_dtheta))
+    dOmega = 4.0*np.pi/int(n_total)
+    return dOmega*np.sum(I_total*mu*dA_dOmega)
 
 
 
@@ -394,7 +401,7 @@ def transit_model(t_vals: NDArray[np.float64], orbital_period: float, st_mass: f
 def gd_transit_model(t_vals: NDArray[np.float64], orbital_period: float, st_mass: float, st_mean_radius: float,
                      st_mean_temperature: float, beta: float, lamda: float, i_s: float, omega: float, u1: float,
                      u2: float, e: float, i_0: float, omega_p: float, raan: float, t_mid: float, rp_rs: float,
-                     obs_wavelength: float, st_grid: int = 3500, pl_grid: int = 1) -> NDArray[np.float64]:
+                     obs_wavelength: float, st_grid: int = 5000, pl_grid: int = 1) -> NDArray[np.float64]:
     """
     Calculating the gravity-darkened transit light-curve of an oblate, rotating star.
 
@@ -478,11 +485,10 @@ def gd_transit_model(t_vals: NDArray[np.float64], orbital_period: float, st_mass
     I_limb = limb_darkening(mu_vis, u1, u2)
     I_total = I_grav[mask]*I_limb
 
-    A_ell = np.pi*R_eq*np.sqrt((R_eq*np.cos(np.deg2rad(i_s)))**2 + (R_polar*np.sin(np.deg2rad(i_s)))**2)  ##### projected area of the visible stellar disk
-    F_out = unocculted_flux(I_total, A_ell)
+    F_out = unocculted_flux(I_total, mu_vis, lat[mask], R_eq, R_polar, st_grid)
     Rp_phys = rp_rs*st_mean_radius
 
-    n1 = 30*pl_grid
+    n1 = 50*pl_grid
     n2 = 750*pl_grid
 
     a = (G*st_mass*((orbital_period*86400)**2)/(4*np.pi**2))**(1/3)
